@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PTS2 Control Panel</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #111a33;
+        --text: #e9eefc;
+        --muted: #a9b6dd;
+        --border: rgba(233, 238, 252, 0.12);
+        --btn: #2b6cff;
+        --btn2: #243055;
+        --danger: #ff4d6d;
+        --ok: #29d37d;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+          monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+      }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background: radial-gradient(1200px 600px at 20% 0%, #182554 0%, var(--bg) 60%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 18px 60px;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.2px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+      }
+      .card {
+        grid-column: span 6;
+        background: rgba(17, 26, 51, 0.8);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        backdrop-filter: blur(6px);
+        min-height: 140px;
+      }
+      .card.full {
+        grid-column: span 12;
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        color: var(--text);
+        letter-spacing: 0.3px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input, textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 10px;
+        background: rgba(11, 16, 32, 0.55);
+        color: var(--text);
+        outline: none;
+      }
+      textarea {
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.35;
+        min-height: 180px;
+        resize: vertical;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      button {
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: var(--btn);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: var(--btn2);
+        border-color: var(--border);
+        color: var(--text);
+      }
+      button.danger {
+        background: rgba(255, 77, 109, 0.15);
+        border-color: rgba(255, 77, 109, 0.4);
+        color: #ffd2da;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #999;
+      }
+      .dot.ok { background: var(--ok); }
+      .dot.bad { background: var(--danger); }
+      .mono {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        .card { grid-column: span 12; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>PTS2 Control Panel</h1>
+          <div class="sub">Calls your local REST API (same server) which talks to the PTS2 device via <span class="mono">/jsonPTS</span>.</div>
+        </div>
+        <div class="pill" id="healthPill">
+          <span class="dot" id="healthDot"></span>
+          <span id="healthText">checking /health…</span>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Date &amp; time</h2>
+          <div class="actions">
+            <button id="btnGetDateTime">GetDateTime</button>
+            <button class="secondary" id="btnSetNow">SetDateTime to local now</button>
+          </div>
+          <div class="mono" style="margin-top: 10px" id="dateTimeOut">—</div>
+          <div class="mono" style="margin-top: 6px; opacity: 0.9">
+            Note: SetDateTime calls <span class="mono">POST /datetime/set</span> (writes to device).
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Configuration</h2>
+          <div class="actions">
+            <button id="btnLoadConfig">Load configuration</button>
+          </div>
+          <div class="mono" style="margin-top: 10px" id="configOut">—</div>
+          <div class="mono" style="margin-top: 6px">
+            Calls <span class="mono">POST /config/load</span> and returns the raw jsonPTS packets.
+          </div>
+        </section>
+
+        <section class="card full">
+          <h2>ReportGetPumpTransactions</h2>
+          <div class="row">
+            <div>
+              <label for="pump">Pump</label>
+              <input id="pump" type="number" value="0" min="0" step="1" />
+            </div>
+            <div>
+              <label for="preset">Preset</label>
+              <input id="preset" type="text" value="today" disabled />
+            </div>
+          </div>
+          <div class="row" style="margin-top: 10px">
+            <div>
+              <label for="from">From (yyyy-MM-ddTHH:mm:ss)</label>
+              <input id="from" type="text" />
+            </div>
+            <div>
+              <label for="to">To (yyyy-MM-ddTHH:mm:ss)</label>
+              <input id="to" type="text" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="btnRunReport">Run report</button>
+            <button class="secondary" id="btnClear">Clear output</button>
+          </div>
+          <label for="output" style="margin-top: 10px">Output</label>
+          <textarea id="output" spellcheck="false" readonly></textarea>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const healthDot = document.getElementById("healthDot");
+      const healthText = document.getElementById("healthText");
+      const output = document.getElementById("output");
+      const fromEl = document.getElementById("from");
+      const toEl = document.getElementById("to");
+      const pumpEl = document.getElementById("pump");
+      const dateTimeOut = document.getElementById("dateTimeOut");
+      const configOut = document.getElementById("configOut");
+
+      function pad2(n) { return String(n).padStart(2, "0"); }
+      function formatPts(d) {
+        const yyyy = d.getFullYear();
+        const MM = pad2(d.getMonth() + 1);
+        const dd = pad2(d.getDate());
+        const HH = pad2(d.getHours());
+        const mm = pad2(d.getMinutes());
+        const ss = pad2(d.getSeconds());
+        return `${yyyy}-${MM}-${dd}T${HH}:${mm}:${ss}`;
+      }
+
+      function setTodayRange() {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 0);
+        fromEl.value = formatPts(start);
+        toEl.value = formatPts(end);
+      }
+
+      function write(obj) {
+        output.value = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      }
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        const txt = await res.text();
+        let data;
+        try { data = txt ? JSON.parse(txt) : null; } catch { data = { raw: txt }; }
+        if (!res.ok) {
+          const msg = data && data.message ? data.message : `HTTP ${res.status}`;
+          throw new Error(`${msg}\n${txt}`);
+        }
+        return data;
+      }
+
+      async function checkHealth() {
+        try {
+          await api("/health");
+          healthDot.className = "dot ok";
+          healthText.textContent = "API ok";
+        } catch (e) {
+          healthDot.className = "dot bad";
+          healthText.textContent = "API error";
+        }
+      }
+
+      document.getElementById("btnGetDateTime").addEventListener("click", async () => {
+        try {
+          const data = await api("/datetime");
+          dateTimeOut.textContent = `dateTime=${data.dateTime} iso=${data.iso} utcOffset=${data.utcOffset} autoSync=${data.autoSynchronize}`;
+          write(data);
+        } catch (e) {
+          write(String(e));
+        }
+      });
+
+      document.getElementById("btnSetNow").addEventListener("click", async () => {
+        if (!confirm("This will set the PTS2 device date/time. Continue?")) return;
+        try {
+          const now = new Date();
+          const data = await api("/datetime/set", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ dateTime: formatPts(now), utcOffset: 0, autoSynchronize: false })
+          });
+          write(data);
+        } catch (e) {
+          write(String(e));
+        }
+      });
+
+      document.getElementById("btnLoadConfig").addEventListener("click", async () => {
+        try {
+          const data = await api("/config/load", { method: "POST" });
+          const packets = data.packets || [];
+          configOut.textContent = `Packets returned: ${packets.length}`;
+          write(data);
+        } catch (e) {
+          write(String(e));
+        }
+      });
+
+      document.getElementById("btnRunReport").addEventListener("click", async () => {
+        try {
+          const pump = Number.parseInt(pumpEl.value || "0", 10);
+          const from = fromEl.value;
+          const to = toEl.value;
+          const data = await api("/report/pump-transactions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pump, from, to })
+          });
+          write(data);
+        } catch (e) {
+          write(String(e));
+        }
+      });
+
+      document.getElementById("btnClear").addEventListener("click", () => {
+        output.value = "";
+      });
+
+      setTodayRange();
+      checkHealth();
+      setInterval(checkHealth, 5000);
+    </script>
+  </body>
+</html>
+
