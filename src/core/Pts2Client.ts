@@ -148,6 +148,14 @@ export class Pts2Client {
     return first;
   }
 
+  /**
+   * Low-level helper: forward a raw jsonPTS envelope to the controller.
+   * Useful for proxying browser requests without re-shaping packets.
+   */
+  async sendJsonPtsEnvelope(envelope: unknown): Promise<unknown> {
+    return this.postWithAuth(envelope);
+  }
+
   async execute(packets: JsonPtsPacketRequest[]): Promise<JsonPtsPacketResponse[]> {
     const envelope = buildEnvelope(packets);
     const raw = await this.postWithAuth(envelope);

@@ -23,15 +23,138 @@ if (publicDir) {
 }
 
 let cachedClient: Pts2Client | undefined;
+let cachedClientKey: string | undefined;
+
+const HostOverrideSchema = z.object({
+  host: z.string().min(1)
+});
+
+function overridePath(): string {
+  // Keep overrides in the project root so both tsx (src/) and dist/ can share it.
+  return path.resolve(process.cwd(), "pts2-config.override.json");
+}
+
+function readHostOverride(): { host?: string } {
+  try {
+    const raw = fs.readFileSync(overridePath(), "utf8");
+    const parsed = HostOverrideSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return {};
+    return { host: parsed.data.host };
+  } catch {
+    return {};
+  }
+}
+
+function writeHostOverride(host: string): void {
+  fs.writeFileSync(overridePath(), JSON.stringify({ host }, null, 2) + "\n", "utf8");
+}
+
+function deleteHostOverride(): void {
+  try {
+    fs.unlinkSync(overridePath());
+  } catch {
+    // ignore
+  }
+}
+
+function effectiveEnvWithOverrides(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  const ovr = readHostOverride();
+  if (ovr.host) {
+    env.PTS2_HOST = ovr.host;
+  }
+  return env;
+}
+
 function getClient(): Pts2Client {
-  if (cachedClient) return cachedClient;
-  const cfg = loadPts2ConfigFromEnv(process.env);
+  const cfg = loadPts2ConfigFromEnv(effectiveEnvWithOverrides());
+  const key = JSON.stringify(cfg);
+  if (cachedClient && cachedClientKey === key) return cachedClient;
+  cachedClientKey = key;
   cachedClient = new Pts2Client(cfg);
   return cachedClient;
 }
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+// Controller host (IP) override API
+const HostSchema = z.object({
+  host: z
+    .string()
+    .min(1)
+    .refine((v) => /^[a-z0-9.-]+$/i.test(v), { message: "host must be an IP/hostname (letters, digits, dots, hyphen)" })
+});
+
+app.get("/api/pts2/host", (_req, res) => {
+  const ovr = readHostOverride();
+  res.json({
+    host: ovr.host ?? (process.env.PTS2_HOST ?? ""),
+    source: ovr.host ? "override" : "env"
+  });
+});
+
+app.put("/api/pts2/host", (req, res) => {
+  try {
+    const body = HostSchema.parse(req.body);
+    writeHostOverride(body.host);
+    // Reset cached client so next call uses the new host.
+    cachedClient = undefined;
+    cachedClientKey = undefined;
+    res.json({ ok: true, host: body.host });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+app.delete("/api/pts2/host", (_req, res) => {
+  deleteHostOverride();
+  cachedClient = undefined;
+  cachedClientKey = undefined;
+  res.json({ ok: true });
+});
+
+// Generic jsonPTS proxy (for browser UIs)
+const JsonPtsEnvelopeSchema = z.object({
+  Protocol: z.string().optional(),
+  Packets: z.array(z.record(z.string(), z.any()))
+});
+
+app.post("/jsonPTS", async (req, res) => {
+  try {
+    const envelope = JsonPtsEnvelopeSchema.parse(req.body);
+    if (envelope.Protocol && envelope.Protocol !== "jsonPTS") {
+      res.status(400).json({ Error: true, Message: "PROTOCOL_MISMATCH", Data: { Protocol: String(envelope.Protocol) } });
+      return;
+    }
+    const client = getClient();
+    const raw = await client.sendJsonPtsEnvelope({ Protocol: "jsonPTS", Packets: envelope.Packets });
+    res.json(raw);
+  } catch (err) {
+    // Return errors in a shape the legacy JS UI understands.
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ Error: true, Message: "BAD_REQUEST", Data: { Issues: err.issues } });
+      return;
+    }
+    if (err instanceof JsonPtsPacketError) {
+      res.status(502).json({ Error: true, Message: err.message, Data: err.packet });
+      return;
+    }
+    if (err instanceof Pts2TransportError) {
+      res.status(err.kind === "timeout" ? 504 : 502).json({
+        Error: true,
+        Message: "PTS_TRANSPORT_ERROR",
+        Data: { kind: err.kind, url: err.url, code: err.code, message: err.message }
+      });
+      return;
+    }
+    if (err instanceof Error) {
+      res.status(500).json({ Error: true, Message: err.message });
+      return;
+    }
+    res.status(500).json({ Error: true, Message: String(err) });
+  }
 });
 
 app.get("/datetime", async (_req, res) => {
